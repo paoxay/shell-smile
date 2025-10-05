@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <style>
+        body { font-family: 'Noto Sans Lao', sans-serif; background-color: #f0f2f5; margin: 0; padding: 30px; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 1000px; margin: auto; }
+        h2 { text-align: center; color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f7f7f7; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>ຈັດການສະມາຊິກ</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>ຊື່ຜູ້ໃຊ້</th>
+                    <th>ຍອດເງິນຄົງເຫຼືອ</th>
+                    <th>ວັນທີສະໝັກ</th>
+                </tr>
+            </thead>
+            <tbody id="members-table-body">
+                </tbody>
+        </table>
+        <div id="message"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('api/members.php')
+                .then(res => {
+                    if (!res.ok) { // ຖ້າບໍ່ແມ່ນ 200 OK (ເຊັ່ນ 401 Unauthorized)
+                        window.location.href = 'index.html'; // ສົ່ງກັບไปหน้าล็อกอิน
+                    }
+                    return res.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        const tableBody = document.getElementById('members-table-body');
+                        data.members.forEach(member => {
+                            const row = document.createElement('tr');
+                            const balance = parseFloat(member.balance).toFixed(4);
+                            const date = new Date(member.created_at).toLocaleString('lo-LA');
+                            row.innerHTML = `
+                                <td>${member.id}</td>
+                                <td>${member.username}</td>
+                                <td>$${balance}</td>
+                                <td>${date}</td>
+                            `;
+                            tableBody.appendChild(row);
+                        });
+                    }
+                });
+        });
+    </script>
+</body>
+</html>
