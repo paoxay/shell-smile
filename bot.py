@@ -354,6 +354,7 @@ def main():
             GET_TXID: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_txid_and_confirm)],
         },
         fallbacks=[CommandHandler('cancel', cancel)],
+        allow_reentry=True
     )
 
     store_conv_handler = ConversationHandler(
@@ -364,6 +365,7 @@ def main():
             EXECUTE_PURCHASE: [CallbackQueryHandler(execute_purchase, pattern='^buy_')]
         },
         fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(cancel, pattern='^cancel_buy$')],
+        allow_reentry=True
     )
 
     application.add_handler(CommandHandler("start", start_command))
