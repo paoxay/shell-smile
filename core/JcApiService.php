@@ -2,26 +2,25 @@
 
 class JcApiService {
     private $baseUrl = 'https://jcplaycoin.com';
-    private $settingsFile;
     private $settings;
 
-    /**
-     * ເມື່ອ Class ຖືກສ້າງ, ໃຫ້ໂຫຼດຂໍ້ມູນຕັ້ງຄ່າມາເກັບໄວ້
-     */
     public function __construct() {
-        $this->settingsFile = __DIR__ . '/../config/settings.php';
-        $this->settings = require $this->settingsFile;
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $this->settings = require __DIR__ . '/../config/settings.php';
     }
 
-    /**
-     * (ຟັງຊັນໃໝ່) ໃຊ້ສຳລັບຂໍ Token ໃໝ່ເມື່ອອັນເກົ່າໝົດອາຍຸ
-     * @return bool
-     * @throws Exception
-     */
-    private function refreshToken() {
+    private function getToken() {
+        if (isset($_SESSION['jc_master_token']) && !empty($_SESSION['jc_master_token'])) {
+            return $_SESSION['jc_master_token'];
+        }
+
         $ch = curl_init($this->baseUrl . '/api/users/login');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HEADER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
@@ -39,92 +38,68 @@ class JcApiService {
             $newToken = $matches[1] ?? null;
             
             if ($newToken) {
-                // ອັບເດດ Token ໃໝ່ໃນ Class
-                $this->settings['jc_master_token'] = $newToken;
-
-                // ອັບເດດ Token ໃໝ່ລົງໃນໄຟລ໌ settings.php
-                // ຄຳເຕືອນ: Server ຕ້ອງມີສິດ (Permission) ໃນການຂຽນທັບໄຟລ໌ນີ້
-                $settingsContent = file_get_contents($this->settingsFile);
-                $newContent = preg_replace(
-                    "/('jc_master_token'\s*=>\s*')[^']*/", 
-                    "$1" . addslashes($newToken), 
-                    $settingsContent
-                );
-                file_put_contents($this->settingsFile, $newContent);
-
-                return true;
+                $_SESSION['jc_master_token'] = $newToken;
+                return $newToken;
             }
         }
         
-        throw new Exception("ບໍ່ສາມາດຂໍ Token ໃໝ່ได้. ກະລຸນາກວດສອບ Username/Password ຂອງບັນຊີຫຼັກ.");
+        throw new Exception("ບໍ່ສາມາດຂໍ Master Token ໄດ້. ກະລຸນາກວດສອບ Username/Password ຂອງບັນຊີຫຼັກ.");
     }
 
-    /**
-     * (ຟັງຊັນໃໝ່) ເປັນຫົວໃຈຫຼັກໃນການຍິງ API, ມີລະບົບລອງໃໝ່ (Retry)
-     * @param string $method (GET, POST)
-     * @param string $endpoint
-     * @param array $payload
-     * @param bool $isRetry
-     * @return array
-     * @throws Exception
-     */
-    private function makeRequest($method, $endpoint, $payload = [], $isRetry = false) {
+    private function makeRequest($method, $endpoint, $payload = []) {
+        $token = $this->getToken();
         $url = $this->baseUrl . $endpoint;
         $ch = curl_init($url);
-
-        $headers = [
-            'Cookie: token=' . $this->settings['jc_master_token']
-        ];
-        
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        $headers = ['Cookie: token=' . $token];
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HEADER, true); // ເອົາ Header ມາເພື່ອກວດສອບ Content-Type
+        curl_setopt($ch, CURLOPT_HEADER, true);
 
         if ($method === 'POST') {
             $headers[] = 'Content-Type: application/json';
             curl_setopt($ch, CURLOPT_POST, true);
             curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         }
-        
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
         $response = curl_exec($ch);
-        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
 
-        // ກວດສອບກໍລະນີ Token ໝົດອາຍຸ (401)
-        if ($http_code == 401 && !$isRetry) {
-            $this->refreshToken(); // ຂໍ Token ໃໝ່
-            return $this->makeRequest($method, $endpoint, $payload, true); // ລອງຍິງ API ຊ້ຳອີກຄັ້ງ
+        if ($response === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            throw new Exception("cURL Error: " . $error);
         }
+        
+        $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        
+        if ($http_code == 401 || $http_code == 302) {
+             unset($_SESSION['jc_master_token']);
+             curl_close($ch);
+             throw new Exception("Authentication failed (Token might be expired). Please try again.");
+        }
+        
+        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+        $header = substr($response, 0, $header_size);
+        $body = substr($response, $header_size);
+        curl_close($ch);
 
         if ($http_code < 200 || $http_code >= 300) {
              throw new Exception("API Error: Server responded with status " . $http_code);
         }
-
-        // ແຍກ Header ແລະ Body
-        $header_size = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
-        $header_str = substr($response, 0, $header_size);
-        $body_str = substr($response, $header_size);
-
-        // ກວດສອບວ່າຄຳຕອບເປັນ JSON ຫຼື HTML
-        if (strpos($header_str, 'application/json') !== false) {
-            return ['type' => 'json', 'content' => json_decode($body_str, true)];
+        
+        if (strpos($header, 'application/json') !== false) {
+            return json_decode($body, true);
         } else {
-            return ['type' => 'html', 'content' => $body_str];
+            return $body;
         }
     }
 
-    // --- ຟັງຊັນ Public ທັງໝົດຈະຖືກປັບໃຫ້ງ່າຍຂຶ້ນ ---
-
     public function getStoreProducts() {
-        $response = $this->makeRequest('GET', '/store');
-        $html = $response['content'];
-        
-        // ... (ໂຄດແກະ HTML ຍັງຄືເກົ່າ) ...
+        $html = $this->makeRequest('GET', '/store');
         $products = [];
-        libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        $dom->loadHTML($html);
+        libxml_use_internal_errors(true); 
+        $dom = new DOMDocument(); 
+        @$dom->loadHTML($html); 
         libxml_clear_errors();
         $xpath = new DOMXPath($dom);
         $product_links = $xpath->query("//a[starts-with(@href, '/detail-product?id=')]");
@@ -140,23 +115,25 @@ class JcApiService {
     }
 
     public function getProductDetails($productId) {
-         $response = $this->makeRequest('GET', '/detail-product?id=' . $productId);
-         $html = $response['content'];
-
-        // ... (ໂຄດແກະ HTML ຍັງຄືເກົ່າ) ...
+         $html = $this->makeRequest('GET', '/detail-product?id=' . $productId);
         $items = [];
-        libxml_use_internal_errors(true);
-        $dom = new DOMDocument();
-        $dom->loadHTML($html);
+        libxml_use_internal_errors(true); 
+        $dom = new DOMDocument(); 
+        @$dom->loadHTML($html); 
         libxml_clear_errors();
         $xpath = new DOMXPath($dom);
         $rows = $xpath->query("//tbody/tr[@data-id]");
         foreach ($rows as $row) {
+            $priceNode = $xpath->query(".//del[contains(@class, 'original-proposed-price')]", $row)->item(0);
+            $base_price = $priceNode ? (float)$priceNode->getAttribute('value') : 0;
+            $original_price = (float)$row->getAttribute('data-disprice');
+
             $items[] = [
                 'item_id' => $row->getAttribute('data-id'),
                 'item_pid' => $row->getAttribute('data-pid'),
                 'name' => trim($xpath->query(".//td[1]", $row)->item(0)->textContent),
-                'base_price' => (float)$row->getAttribute('data-base-price'),
+                'base_price' => $base_price,
+                'original_price' => $original_price,
             ];
         }
         return $items;
@@ -164,22 +141,28 @@ class JcApiService {
 
     public function initiateTopup($amount) {
         $payload = ['amount' => (string)$amount, 'type' => 'crypto-network'];
-        $response = $this->makeRequest('POST', '/api/transactions/topup', $payload);
-        // ... The logic for fetching the payment page and parsing it should be here ...
-        // For now, we will return the direct response and assume the refactor is focused on token refresh
-        return $response['content'];
+        $result1 = $this->makeRequest('POST', '/api/transactions/topup', $payload);
+        $ref_code = $result1['data']['ref'] ?? null;
+        if (!$ref_code) return null;
+        $htmlResponse = $this->makeRequest('GET', '/payment?ref=' . $ref_code);
+        $dom = new DOMDocument(); @$dom->loadHTML($htmlResponse);
+        $xpath = new DOMXPath($dom);
+        $wallet_address = $xpath->query("//input[@id='cryptoNetworkId']")->item(0)->getAttribute('value') ?? null;
+        $network = $xpath->query("//input[@id='cryptoNetworkChannel']")->item(0)->getAttribute('value') ?? null;
+        $currency = $xpath->query("//input[@id='currency']")->item(0)->getAttribute('value') ?? null;
+        $final_data = $result1['data'];
+        $final_data['payment_details'] = ['wallet_address' => $wallet_address, 'network' => $network, 'currency' => $currency];
+        return ['success' => true, 'data' => $final_data];
     }
-
+    
     public function confirmTopup($ref, $txId) {
         $payload = ['ref' => $ref, 'txId' => $txId];
-        $response = $this->makeRequest('POST', '/api/transactions/confirm-payment', $payload);
-        return $response['content'];
+        return $this->makeRequest('POST', '/api/transactions/confirm-payment', $payload);
     }
 
     public function createOrder($items, $totalAmount) {
         $payload = ['amount' => $totalAmount, 'items' => $items];
-        $response = $this->makeRequest('POST', '/api/transactions/order', $payload);
-        return $response['content'];
+        return $this->makeRequest('POST', '/api/transactions/order', $payload);
     }
 }
 ?>

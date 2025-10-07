@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <title>ຈັດການສະມາຊິກ - Admin Panel</title>
+    <style>
+        body { font-family: 'Noto Sans Lao', sans-serif; background-color: #f8f9fa; margin: 0; }
+        .admin-layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background-color: #343a40; color: white; padding: 20px; box-sizing: border-box; }
+        .sidebar h2 { text-align: center; border-bottom: 1px solid #4a4a4a; padding-bottom: 15px; }
+        .sidebar ul { list-style-type: none; padding: 0; margin-top: 30px; }
+        .sidebar ul li a { display: block; color: #adb5bd; text-decoration: none; padding: 15px; border-radius: 5px; margin-bottom: 5px; }
+        .sidebar ul li a:hover, .sidebar ul li a.active { background-color: #495057; color: white; }
+        .logout-button { color: #ffc107 !important; margin-top: 50px; }
+        .main-content { flex-grow: 1; padding: 30px; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 30px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f7f7f7; }
+        button { cursor: pointer; padding: 5px 10px; border-radius: 4px; border: none; }
+        .btn-edit { background-color: #ffc107; }
+        .btn-adjust { background-color: #17a2b8; color: white; }
+        .btn-create { background-color: #28a745; color: white; padding: 10px 15px;}
+        .message { margin-top: 15px; font-weight: bold; }
+        .success { color: green; }
+        .error { color: red; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); }
+        .modal-content { background-color: #fefefe; margin: 15% auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 500px; border-radius: 8px; }
+        .close-button { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; }
+        .form-group input { width: 95%; padding: 8px; }
+    </style>
+</head>
+<body>
+    <div class="admin-layout">
+        <nav class="sidebar">
+            <h2>Admin Panel</h2>
+            <ul>
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="products.html">ຈັດການສິນຄ້າ</a></li>
+                <li><a href="members.html" class="active">ຈັດການສະມາຊິກ</a></li>
+                <li><a href="#" id="logout-button" class="logout-button">ອອກຈາກລະບົບ</a></li>
+            </ul>
+        </nav>
+
+        <main class="main-content">
+            <div class="container">
+                <h2>ເພີ່ມສະມາຊິກໃໝ່</h2>
+                <form id="create-user-form">
+                    <input type="text" id="new-username" placeholder="ຊື່ຜູ້ໃຊ້" required>
+                    <input type="password" id="new-password" placeholder="ລະຫັດຜ່ານ" required>
+                    <button type="submit" class="btn-create">ສ້າງຜູ້ໃຊ້</button>
+                </form>
+                <div id="create-message" class="message"></div>
+            </div>
+
+            <div class="container">
+                <h2>ລາຍຊື່ສະມາຊິກ</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th><th>ຊື່ຜູ້ໃຊ້</th><th>ຍອດເງິນ</th><th>ວັນທີສະໝັກ</th><th>ຈັດການ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="members-table-body"></tbody>
+                </table>
+                <div id="list-message"></div>
+            </div>
+        </main>
+    </div>
+
+    <div id="password-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('password-modal')">&times;</span>
+            <h3>ປ່ຽນລະຫັດຜ່ານໃຫ້ <span id="pwd-username"></span></h3>
+            <div class="form-group">
+                <label for="modal-new-password">ລະຫັດຜ່ານໃໝ່:</label>
+                <input type="password" id="modal-new-password">
+                <input type="hidden" id="pwd-user-id">
+            </div>
+            <button onclick="submitPasswordChange()">ບັນທຶກ</button>
+            <div id="pwd-message" class="message"></div>
+        </div>
+    </div>
+
+    <div id="balance-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('balance-modal')">&times;</span>
+            <h3>ປັບປຸງຍອດເງິນຂອງ <span id="bal-username"></span></h3>
+            <div class="form-group">
+                <label for="modal-amount">ຈຳນວນເງິນ (ໃສ່ຄ່າລົບເພື່ອຫັກເງິນ):</label>
+                <input type="number" step="0.01" id="modal-amount" placeholder="ຕົວຢ່າງ: 10.50 ຫຼື -5.00">
+            </div>
+            <div class="form-group">
+                <label for="modal-remark">ໝາຍເຫດ:</label>
+                <input type="text" id="modal-remark" placeholder="ຕົວຢ່າງ: ໂບນັດປະຈຳເດືອນ">
+                 <input type="hidden" id="bal-user-id">
+            </div>
+            <button onclick="submitBalanceAdjustment()">ບັນທຶກ</button>
+            <div id="bal-message" class="message"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Modal Helper Functions ---
+        function openModal(modalId, userId, username) {
+            const modal = document.getElementById(modalId);
+            modal.style.display = 'block';
+            if (modalId === 'password-modal') {
+                document.getElementById('pwd-user-id').value = userId;
+                document.getElementById('pwd-username').textContent = username;
+                document.getElementById('modal-new-password').value = '';
+                document.getElementById('pwd-message').textContent = '';
+            } else if (modalId === 'balance-modal') {
+                document.getElementById('bal-user-id').value = userId;
+                document.getElementById('bal-username').textContent = username;
+                document.getElementById('modal-amount').value = '';
+                document.getElementById('modal-remark').value = '';
+                document.getElementById('bal-message').textContent = '';
+            }
+        }
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function loadMembers() {
+            const tableBody = document.getElementById('members-table-body');
+            const listMessage = document.getElementById('list-message');
+            listMessage.textContent = 'ກຳລັງໂຫຼດຂໍ້ມູນ...';
+            fetch('api/members.php')
+                .then(res => {
+                    if (res.status === 401) window.location.href = 'index.html';
+                    return res.json();
+                })
+                .then(data => {
+                    tableBody.innerHTML = '';
+                    if (data.success && data.members.length > 0) {
+                        listMessage.textContent = '';
+                        data.members.forEach(member => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${member.id}</td>
+                                <td>${member.username}</td>
+                                <td>$${parseFloat(member.balance).toFixed(4)}</td>
+                                <td>${new Date(member.created_at).toLocaleString('lo-LA')}</td>
+                                <td>
+                                    <button class="btn-edit" onclick="openModal('password-modal', ${member.id}, '${member.username}')">ປ່ຽນລະຫັດ</button>
+                                    <button class="btn-adjust" onclick="openModal('balance-modal', ${member.id}, '${member.username}')">ປັບຍອດເງິນ</button>
+                                </td>
+                            `;
+                            tableBody.appendChild(row);
+                        });
+                    } else { listMessage.textContent = 'ບໍ່ພົບຂໍ້ມູນສະມາຊິກ.'; }
+                })
+                .catch(error => {
+                    listMessage.textContent = 'ເກີດຂໍ້ຜິດພາດໃນການໂຫຼດຂໍ້ມູນ.';
+                    console.error("Load members error:", error);
+                });
+        }
+
+        function submitPasswordChange() {
+            const userId = document.getElementById('pwd-user-id').value;
+            const newPassword = document.getElementById('modal-new-password').value;
+            const msgDiv = document.getElementById('pwd-message');
+            fetch('api/members/update_password.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, new_password: newPassword })
+            })
+            .then(res => res.json())
+            .then(data => {
+                msgDiv.className = data.success ? 'message success' : 'message error';
+                msgDiv.textContent = data.message;
+                if(data.success) setTimeout(() => closeModal('password-modal'), 1500);
+            });
+        }
+        
+        function submitBalanceAdjustment() {
+            const userId = document.getElementById('bal-user-id').value;
+            const amount = document.getElementById('modal-amount').value;
+            const remark = document.getElementById('modal-remark').value;
+            const msgDiv = document.getElementById('bal-message');
+            fetch('api/members/adjust_balance.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, amount: parseFloat(amount), remark })
+            })
+            .then(res => res.json())
+            .then(data => {
+                msgDiv.className = data.success ? 'message success' : 'message error';
+                msgDiv.textContent = data.message;
+                if(data.success) {
+                    loadMembers();
+                    setTimeout(() => closeModal('balance-modal'), 1500);
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('create-user-form').addEventListener('submit', function(e) {
+                e.preventDefault();
+                const username = document.getElementById('new-username').value;
+                const password = document.getElementById('new-password').value;
+                const msgDiv = document.getElementById('create-message');
+                fetch('api/members/create.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    msgDiv.className = data.success ? 'message success' : 'message error';
+                    msgDiv.textContent = data.message;
+                    if (data.success) {
+                        e.target.reset();
+                        loadMembers();
+                    }
+                });
+            });
+
+            document.getElementById('logout-button').addEventListener('click', function(e) {
+                e.preventDefault();
+                if (confirm('ທ່ານຕ້ອງການອອກຈາກລະບົບແທ້ບໍ່?')) {
+                    fetch('api/logout.php').then(() => window.location.href = 'index.html');
+                }
+            });
+
+            loadMembers();
+        });
+    </script>
+</body>
+</html>

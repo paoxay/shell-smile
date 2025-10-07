@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="lo">
+<head>
+    <meta charset="UTF-8">
+    <title>ຈັດການສິນຄ້າ - Admin Panel</title>
+    <style>
+        body { font-family: 'Noto Sans Lao', sans-serif; background-color: #f8f9fa; margin: 0; }
+        .admin-layout { display: flex; min-height: 100vh; }
+        .sidebar { width: 250px; background-color: #343a40; color: white; padding: 20px; box-sizing: border-box; flex-shrink: 0; }
+        .sidebar h2 { text-align: center; border-bottom: 1px solid #4a4a4a; padding-bottom: 15px; }
+        .sidebar ul { list-style-type: none; padding: 0; margin-top: 30px; }
+        .sidebar ul li a { display: block; color: #adb5bd; text-decoration: none; padding: 15px; border-radius: 5px; margin-bottom: 5px; }
+        .sidebar ul li a:hover, .sidebar ul li a.active { background-color: #495057; color: white; }
+        .logout-button { color: #ffc107 !important; margin-top: 50px; }
+        .main-content { flex-grow: 1; padding: 30px; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); max-width: 1400px; margin: auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px;}
+        h2 { margin: 0; }
+        .sync-button { background-color: #007bff; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
+        .sync-button:disabled { background-color: #aaa; cursor: not-allowed; }
+        .product-group { border: 1px solid #ddd; border-radius: 8px; margin-bottom: 20px; }
+        .product-group legend { font-size: 20px; font-weight: bold; padding: 0 10px; margin-left: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border-bottom: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
+        input[type="number"] { width: 80px; padding: 5px; }
+        .save-button { background-color: #28a745; color: white; padding: 5px 15px; border: none; border-radius: 4px; cursor: pointer; }
+        .save-button:disabled { background-color: #aaa; }
+        .profit-display { color: #28a745; font-weight: bold; }
+        .selling-price-display { font-weight: bold; }
+        .message { margin-left: 20px; }
+        .save-status { margin-left: 10px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <div class="admin-layout">
+        <nav class="sidebar">
+            <h2>Admin Panel</h2>
+            <ul>
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="products.html" class="active">ຈັດການສິນຄ້າ</a></li>
+                <li><a href="members.html">ຈັດການສະມາຊິກ</a></li>
+                <li><a href="#" id="logout-button" class="logout-button">ອອກຈາກລະບົບ</a></li>
+            </ul>
+        </nav>
+        <main class="main-content">
+            <div class="container">
+                <div class="header">
+                    <h2>ຈັດການສິນຄ້າ ແລະ ລາຄາຂາຍ (Real-time)</h2>
+                    <div>
+                        <button id="sync-button" class="sync-button">Sync New Products</button>
+                        <span id="message" class="message"></span>
+                    </div>
+                </div>
+                <div id="products-container">ກຳລັງໂຫຼດຂໍ້ມູນລາຄາຫຼ້າສຸດ...</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const productsContainer = document.getElementById('products-container');
+            const syncButton = document.getElementById('sync-button');
+            const messageSpan = document.getElementById('message');
+            const logoutButton = document.getElementById('logout-button');
+
+            function calculatePrices(row) {
+                const basePrice = parseFloat(row.dataset.basePrice);
+                const markupType = row.querySelector('.markup-type').value;
+                const markupValue = parseFloat(row.querySelector('.markup-value').value) || 0;
+                let sellingPrice = 0, profit = 0;
+                if (markupType === 'percentage') {
+                    profit = basePrice * (markupValue / 100);
+                    sellingPrice = basePrice + profit;
+                } else {
+                    profit = markupValue;
+                    sellingPrice = basePrice + profit;
+                }
+                row.querySelector('.selling-price-display').textContent = `$${sellingPrice.toFixed(4)}`;
+                row.querySelector('.profit-display').textContent = `$${profit.toFixed(4)}`;
+            }
+
+            function loadProducts() {
+                productsContainer.innerHTML = 'ກຳລັງໂຫຼດຂໍ້ມູນລາຄາຫຼ້າສຸດຈາກ API, ກະລຸນາລໍຖ້າ...';
+                fetch('api/products/list.php')
+                    .then(res => {
+                        if (res.status === 401) window.location.href = 'index.html';
+                        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+                        return res.json();
+                    })
+                    .then(result => {
+                        productsContainer.innerHTML = '';
+                        if (result.success && result.products) {
+                             if (result.products.length > 0) {
+                                result.products.forEach(product => {
+                                    let itemsHTML = product.items.map(item => `
+                                        <tr data-item-id="${item.item_id}" data-base-price="${item.base_price}">
+                                            <td>${item.item_name}</td>
+                                            <td>$${parseFloat(item.original_price).toFixed(4)}</td>
+                                            <td>$${parseFloat(item.base_price).toFixed(4)}</td>
+                                            <td><select class="markup-type"><option value="percentage" ${item.markup_type === 'percentage' ? 'selected' : ''}>%</option><option value="fixed" ${item.markup_type === 'fixed' ? 'selected' : ''}>$</option></select></td>
+                                            <td><input type="number" class="markup-value" value="${item.markup_value}" step="0.01"></td>
+                                            <td class="selling-price-display"></td>
+                                            <td class="profit-display"></td>
+                                            <td><input type="checkbox" class="is-active" ${item.item_is_active == 1 ? 'checked' : ''}></td>
+                                            <td><button class="save-button">Save</button><span class="save-status"></span></td>
+                                        </tr>`).join('');
+
+                                    const productGroupHTML = `
+                                        <fieldset class="product-group">
+                                            <legend>
+                                                ${product.product_name}
+                                                <label style="font-size:14px;margin-left:20px;font-weight:normal;cursor:pointer;">
+                                                    <input type="checkbox" class="product-master-switch" data-product-id="${product.product_id}" ${product.product_is_active == 1 ? 'checked' : ''}>
+                                                    ເປີດ/ປິດ ທັງໝົດ
+                                                </label>
+                                            </legend>
+                                            <table><thead><tr><th>ແພັກເກັດ</th><th>Original Price</th><th>ລາຄາຕົ້ນທຶນ (Real-time)</th><th>ປະເພດ</th><th>ຄ່າກຳໄລ</th><th>ລາຄາຂາຍ</th><th>ກຳໄລ</th><th>ເປີດໃຊ້ງານ</th><th>ຈັດການ</th></tr></thead>
+                                            <tbody>${itemsHTML}</tbody></table></fieldset>`;
+                                    productsContainer.innerHTML += productGroupHTML;
+                                });
+                                setTimeout(() => {
+                                    document.querySelectorAll('#products-container tbody tr').forEach(row => calculatePrices(row));
+                                }, 0);
+                            } else {
+                                productsContainer.innerHTML = 'ບໍ່ພົບຂໍ້ມູນສິນຄ້າ. ກະລຸນາກົດ Sync ເພື່ອເພີ່ມສິນຄ້າໃໝ່.';
+                            }
+                        } else {
+                             productsContainer.innerHTML = `<p class="error">ເກີດຂໍ້ຜິດພາດ: ${result.message || 'ບໍ່ສາມາດໂຫຼດຂໍ້ມູນໄດ້'}</p>`;
+                        }
+                    }).catch(err => {
+                        productsContainer.innerHTML = `<p class="error">ເກີດຂໍ້ຜິດພາດໃນການເຊື່ອມຕໍ່. ກະລຸນາກວດສອບ Console (F12).</p>`;
+                        console.error("Load Products Error:", err);
+                    });
+            }
+            
+            productsContainer.addEventListener('input', function(event) {
+                if (event.target.classList.contains('markup-type') || event.target.classList.contains('markup-value')) {
+                    calculatePrices(event.target.closest('tr'));
+                }
+            });
+
+            productsContainer.addEventListener('click', function(event) {
+                if (event.target.classList.contains('save-button')) {
+                    const btn = event.target;
+                    const row = btn.closest('tr');
+                    const statusSpan = row.querySelector('.save-status');
+                    btn.disabled = true; statusSpan.textContent = 'Saving...';
+                    fetch('api/products/update.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            item_id: row.dataset.itemId, 
+                            markup_type: row.querySelector('.markup-type').value, 
+                            markup_value: row.querySelector('.markup-value').value, 
+                            is_active: row.querySelector('.is-active').checked 
+                        })
+                    }).then(res => res.json()).then(result => {
+                        statusSpan.className = result.success ? 'save-status success' : 'save-status error';
+                        statusSpan.textContent = result.success ? 'Saved!' : 'Error!';
+                        setTimeout(() => { statusSpan.textContent = ''; }, 2000);
+                    }).catch(err => {
+                        statusSpan.className = 'save-status error';
+                        statusSpan.textContent = 'Fetch Error!';
+                        console.error('Save Error:', err);
+                    }).finally(() => { btn.disabled = false; });
+                }
+            });
+
+            productsContainer.addEventListener('change', function(event) {
+                if (event.target.classList.contains('product-master-switch')) {
+                    const cb = event.target;
+                    cb.disabled = true;
+                    fetch('api/products/update_product.php', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ product_id: cb.dataset.productId, is_active: cb.checked })
+                    })
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP Error ${res.status}`);
+                        return res.json();
+                    })
+                    .then(result => { 
+                        if (result.success) {
+                            const isChecked = cb.checked;
+                            const itemsContainer = cb.closest('fieldset').querySelector('tbody');
+                            itemsContainer.querySelectorAll('.is-active').forEach(itemCheckbox => {
+                                itemCheckbox.checked = isChecked;
+                            });
+                        } else {
+                            alert('Error updating product status: ' + result.message);
+                            cb.checked = !cb.checked; // Revert checkbox on failure
+                        }
+                    }).catch(err => {
+                        alert('A network error occurred. Please try again.');
+                        console.error('Update Product Error:', err);
+                        cb.checked = !cb.checked; // Revert checkbox on failure
+                    }).finally(() => {
+                         cb.disabled = false;
+                    });
+                }
+            });
+
+            syncButton.addEventListener('click', function() {
+                syncButton.disabled = true;
+                messageSpan.textContent = 'ກຳລັງ Sync...';
+                fetch('api/products/sync.php')
+                    .then(res => res.json())
+                    .then(result => {
+                        messageSpan.className = result.success ? 'message success' : 'message error';
+                        messageSpan.textContent = result.message;
+                        if(result.success) loadProducts();
+                    }).catch(err => {
+                        messageSpan.className = 'message error';
+                        messageSpan.textContent = 'Sync Error!';
+                    }).finally(() => {
+                        syncButton.disabled = false;
+                        setTimeout(() => { messageSpan.textContent = ''; }, 3000);
+                    });
+            });
+            
+            logoutButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (confirm('ທ່ານຕ້ອງການອອກຈາກລະບົບແທ້ບໍ່?')) {
+                    fetch('api/logout.php').then(() => window.location.href = 'index.html');
+                }
+            });
+            
+            loadProducts();
+        });
+    </script>
+</body>
+</html>
+

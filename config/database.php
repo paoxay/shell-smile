@@ -1,9 +1,9 @@
 <?php
 // กำหนดค่าการเชื่อมต่อฐานข้อมูล
 $host = '127.0.0.1';
-$db   = 'smile_panel_php';
+$db   = 'smile_panel_php'; // ตรวจสอบชื่อฐานข้อมูลของคุณ
 $user = 'root';
-$pass = ''; // ໃສ່ລະຫັດຜ່ານຂອງທ່ານຖ້າມີ
+$pass = ''; // ใส่รหัสผ่านของคุณถ้ามี
 $charset = 'utf8mb4';
 
 $dsn = "mysql:host=$host;dbname=$db;charset=$charset";
@@ -14,10 +14,8 @@ $options = [
 ];
 
 try {
-    // สร้าง object PDO สำหรับเชื่อมต่อฐานข้อมูล
     $pdo = new PDO($dsn, $user, $pass, $options);
 } catch (\PDOException $e) {
-    // หากเชื่อมต่อไม่ได้ ให้โยน error ออกไป
     throw new \PDOException($e->getMessage(), (int)$e->getCode());
 }
 ?>
