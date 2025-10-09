@@ -60,14 +60,16 @@ def getProductDetails(product_id):
     rows = soup.select("tbody tr[data-id]")
     for row in rows:
         price_node = row.select_one("del.original-proposed-price")
-        base_price = float(price_node['value']) if price_node and 'value' in price_node.attrs else 0.0
-        original_price = float(row.get('data-disprice', 0.0))
+        # --- FIX: ສົ່ງຄ່າເປັນ string ເພື່ອຮັກສາຄວາມแม่นยำ ---
+        base_price = price_node['value'] if price_node and 'value' in price_node.attrs else '0.0'
+        original_price = row.get('data-disprice', '0.0')
         items.append({'item_id': row.get('data-id'), 'item_pid': row.get('data-pid'),'name': row.select_one("td").text.strip(),'base_price': base_price,'original_price': original_price})
     return items
 
 def createOrder(items, total_amount):
     """ສ້າງຄຳສັ່ງຊື້"""
-    payload = {'amount': 0, 'items': items}
+    # --- FIX: ແປງ total_amount ເປັນ string ຕາມທີ່ API ต้องการ ---
+    payload = {'amount': str(total_amount), 'items': items}
     response = _make_request('POST', '/api/transactions/order', payload)
     return response.json() if response and 'application/json' in response.headers.get('Content-Type', '') else None
 
@@ -80,18 +82,14 @@ def getOrderDetailCode(ref_code):
         
         soup = BeautifulSoup(response.text, 'lxml')
         
-        # --- LOGIC ໃໝ່ທີ່ຖືກຕ້ອງ 100% ---
-        # 1. ຊອກຫາປ້າຍ "Code"
         code_label = soup.find('p', class_='text-grey-custom', string=lambda text: text and 'Code' in text)
         
         if code_label:
-            # 2. ຊອກຫາ div ທີ່ເປັນ container ຂອງ code ຕົວຈິງ
             code_row = code_label.find_next_sibling('div', class_='row')
             if code_row:
-                # 3. ຊອກຫາ <p class="m-0"> ທີ່ຢູ່ຂ້າງໃນ
                 code_tag = code_row.find('p', class_='m-0')
                 if code_tag and code_tag.text.strip():
-                    return code_tag.text.strip() # ສົ່ງຄືນ Code ທີ່ດຶງໄດ້
+                    return code_tag.text.strip()
         
         return "ບໍ່ພົບ Code (ໂຄງສ້າງ HTML ອາດຈະປ່ຽນ)"
     except Exception as e:
